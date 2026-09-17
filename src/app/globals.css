@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+/* Paleta de marca del comedor Don Bigotes: vino tinto, cobre/bronce y
+   madera. Valores provisionales — ajustar contra el logo real del negocio
+   cuando esté disponible. */
+@theme {
+  --color-vino: #6b1f2a;
+  --color-cobre: #b5651d;
+  --color-madera: #7a5230;
+  --color-crema: #faf3e8;
+  --color-hueso: #f2e6d3;
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  --background: var(--color-hueso);
+  --foreground: #2a1810;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
