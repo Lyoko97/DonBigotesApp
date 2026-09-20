@@ -72,7 +72,7 @@ export default function MenuPage() {
       <Navbar />
       <main className="max-w-5xl mx-auto p-6 w-full">
         <h1 className="text-3xl font-bold text-gray-800 mb-2">Gestión de Menú - Don Bigotes</h1>
-        <p className="text-gray-600 mb-6">Módulo Persona 2: Control Completo de Platillos (CRUD) y Disponibilidad</p>
+        <p className="text-gray-600 mb-6">Control Completo de Platillos y Disponibilidad</p>
 
         {/* Formulario Crear Platillo */}
         <form onSubmit={handleCreateDish} className="bg-white p-5 rounded-lg shadow border border-gray-200 mb-8">
