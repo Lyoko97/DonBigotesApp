@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Dish } from '@/types/dish';
 
-// Base de datos simulada en memoria para la Persona 2
 let initialDishes: Dish[] = [
   {
     id: '1',
@@ -41,12 +40,33 @@ let initialDishes: Dish[] = [
   }
 ];
 
-// GET: Obtener la lista de platillos
+// GET: Listar platillos
 export async function GET() {
   return NextResponse.json(initialDishes);
 }
 
-// PUT: Actualizar estado de disponibilidad o datos de un platillo
+// POST: Crear nuevo platillo
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const newDish: Dish = {
+      id: Date.now().toString(),
+      name: body.name,
+      description: body.description,
+      price: Number(body.price),
+      category: body.category || 'general',
+      available: true,
+      stock: body.stock ? Number(body.stock) : 10
+    };
+
+    initialDishes.push(newDish);
+    return NextResponse.json({ message: 'Platillo creado', dish: newDish }, { status: 201 });
+  } catch {
+    return NextResponse.json({ error: 'Error al crear el platillo' }, { status: 500 });
+  }
+}
+
+// PUT: Actualizar estado o datos de platillo
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
@@ -63,8 +83,25 @@ export async function PUT(request: Request) {
       return dish;
     });
 
-    return NextResponse.json({ message: 'Platillo actualizado con éxito', dishes: initialDishes });
-  } catch (error) {
+    return NextResponse.json({ message: 'Platillo actualizado', dishes: initialDishes });
+  } catch {
     return NextResponse.json({ error: 'Error al actualizar platillo' }, { status: 500 });
+  }
+}
+
+// DELETE: Eliminar un platillo
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID no proporcionado' }, { status: 400 });
+    }
+
+    initialDishes = initialDishes.filter((dish) => dish.id !== id);
+    return NextResponse.json({ message: 'Platillo eliminado' });
+  } catch {
+    return NextResponse.json({ error: 'Error al eliminar platillo' }, { status: 500 });
   }
 }
