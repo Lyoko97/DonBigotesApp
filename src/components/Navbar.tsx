@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
-const links = [
+const baseLinks = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/menu", label: "Menú" },
   { href: "/pedidos", label: "Pedidos" },
@@ -15,6 +15,13 @@ export default function Navbar() {
   const pathname = usePathname();
 
   if (!user) return null;
+
+  // El registro de nuevas cuentas es una acción exclusiva del admin (dueño
+  // del comedor); el encargado no debe ver ni acceder a ese enlace.
+  const links =
+    user.role === "admin"
+      ? [...baseLinks, { href: "/register", label: "Nuevo usuario" }]
+      : baseLinks;
 
   return (
     <nav className="bg-vino text-white shadow-md">

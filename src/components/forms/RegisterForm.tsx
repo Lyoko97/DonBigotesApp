@@ -2,7 +2,6 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { validateEmail, validatePassword, validateRequired } from "@/lib/validation";
 import type { Role } from "@/types/auth";
@@ -49,6 +48,8 @@ export default function RegisterForm() {
       return;
     }
 
+    // El admin creó la cuenta de otro usuario; su propia sesión no cambia,
+    // así que simplemente vuelve al dashboard.
     router.push("/dashboard");
   }
 
@@ -144,13 +145,6 @@ export default function RegisterForm() {
       >
         {isSubmitting ? "Creando cuenta..." : "Crear cuenta"}
       </button>
-
-      <p className="text-center text-sm text-madera">
-        ¿Ya tienes cuenta?{" "}
-        <Link href="/login" className="font-medium text-cobre hover:underline">
-          Inicia sesión
-        </Link>
-      </p>
     </form>
   );
 }

@@ -2,7 +2,6 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { validateEmail, validatePassword } from "@/lib/validation";
 
@@ -85,13 +84,6 @@ export default function LoginForm() {
       >
         {isSubmitting ? "Ingresando..." : "Iniciar sesión"}
       </button>
-
-      <p className="text-center text-sm text-madera">
-        ¿No tienes cuenta?{" "}
-        <Link href="/register" className="font-medium text-cobre hover:underline">
-          Regístrate
-        </Link>
-      </p>
     </form>
   );
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PROTECTED_PATHS = ["/dashboard", "/menu", "/pedidos"];
+const PROTECTED_PATHS = ["/dashboard", "/menu", "/pedidos", "/register"];
 const SESSION_COOKIE = "donbigotes_session";
 
 // TODO: cuando exista el backend real, validar aquí un JWT firmado en vez
@@ -27,5 +27,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/menu/:path*", "/pedidos/:path*"],
+  matcher: ["/dashboard/:path*", "/menu/:path*", "/pedidos/:path*", "/register/:path*"],
 };

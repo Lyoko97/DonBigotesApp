@@ -75,14 +75,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role: Role
     ): Promise<AuthResult> => {
       // TODO: reemplazar por POST /api/auth/register cuando el backend esté listo.
+      // Nota: esta acción la ejecuta un admin ya autenticado para crear la
+      // cuenta de otro miembro del equipo, así que NO debe iniciar sesión
+      // como el usuario recién creado ni tocar la sesión actual.
       if (emailExists(usersDb, email)) {
         return { success: false, error: "Ya existe una cuenta con ese correo." };
       }
       const newUser: User = { id: String(nextId++), nombre, email, password, role };
       usersDb = [...usersDb, newUser];
-      const publicUser = toPublicUser(newUser);
-      persistSession(publicUser);
-      setUser(publicUser);
       return { success: true };
     },
     []
