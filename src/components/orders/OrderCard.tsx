@@ -4,15 +4,33 @@ import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useOrders } from "@/context/OrdersContext";
 import type { Order, OrderActionResult } from "@/types/order";
-import { getNextStatus, isInProgress, ORDER_STATUS_ACTION_LABELS } from "@/lib/orderStatus";
-import { formatCurrency, formatOrderNumber, formatTime } from "@/lib/format";
+import {
+  DELIVERY_TYPE_LABELS,
+  getNextStatus,
+  isInProgress,
+  ORDER_STATUS_ACTION_LABELS,
+  PAYMENT_METHOD_LABELS,
+} from "@/lib/orderStatus";
+import {
+  formatCurrency,
+  formatDayLabel,
+  formatOrderNumber,
+  formatTime,
+  toBusinessDateKey,
+} from "@/lib/format";
 import OrderStatusBadge from "@/components/orders/OrderStatusBadge";
 
 type PendingConfirm = "cancel" | "delete" | null;
 
 export default function OrderCard({ order }: { order: Order }) {
   const { role } = useAuth();
-  const { updateStatus, cancelOrder, deleteOrder } = useOrders();
+  const { updateStatus, cancelOrder, deleteOrder, todayKey } = useOrders();
+  const orderDateKey = toBusinessDateKey(order.createdAt);
+  // Los pedidos de días anteriores muestran también la fecha.
+  const when =
+    orderDateKey === todayKey
+      ? formatTime(order.createdAt)
+      : `${formatDayLabel(orderDateKey)} · ${formatTime(order.createdAt)}`;
   const [confirming, setConfirming] = useState<PendingConfirm>(null);
   const [isWorking, setIsWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +60,7 @@ export default function OrderCard({ order }: { order: Order }) {
         <div className="mb-2 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-cobre">
-              {formatOrderNumber(order.number)} · {formatTime(order.createdAt)}
+              {formatOrderNumber(order.number)} · {when}
             </p>
             <h3 className="truncate text-lg font-semibold text-stone-900">{order.customerName}</h3>
             {order.customerPhone && (
@@ -51,6 +69,20 @@ export default function OrderCard({ order }: { order: Order }) {
           </div>
           <OrderStatusBadge status={order.status} />
         </div>
+
+        <div className="mb-3 flex flex-wrap gap-2 text-xs">
+          <span className="rounded border border-madera/20 bg-hueso/60 px-2 py-0.5 font-medium text-madera">
+            {DELIVERY_TYPE_LABELS[order.deliveryType]}
+          </span>
+          <span className="rounded border border-madera/20 bg-hueso/60 px-2 py-0.5 font-medium text-madera">
+            Pago: {PAYMENT_METHOD_LABELS[order.paymentMethod]}
+          </span>
+        </div>
+        {order.deliveryAddress && (
+          <p className="mb-3 text-sm text-stone-800">
+            <span className="font-semibold text-madera">Entregar en:</span> {order.deliveryAddress}
+          </p>
+        )}
 
         <ul className="mb-3 divide-y divide-madera/10 border-y border-madera/10 text-sm">
           {order.items.map((item) => (

@@ -1,15 +1,25 @@
 import type {
   CreateOrderInput,
   CreateOrderItemInput,
+  DeliveryType,
   OrderAuthor,
   OrderFieldErrors,
+  PaymentMethod,
 } from "@/types/order";
+import {
+  CARD_NOT_ALLOWED_MESSAGE,
+  isDeliveryType,
+  isPaymentAllowed,
+  isPaymentMethod,
+} from "@/lib/orderStatus";
 
 // Reglas compartidas por el formulario (cliente) y por /api/orders
 // (servidor), para que ambos lados validen exactamente lo mismo.
 export const ORDER_LIMITS = {
   customerNameMin: 2,
   customerNameMax: 60,
+  addressMin: 10,
+  addressMax: 150,
   notesMax: 200,
   maxQuantityPerItem: 50,
   maxItems: 20,
@@ -40,13 +50,40 @@ export function validateCustomerName(name: string): string | null {
   return null;
 }
 
-// El teléfono es opcional (pedidos en mesa), pero si se escribe debe ser válido.
-export function validateCustomerPhone(phone: string): string | null {
-  if (!phone.trim()) return null;
+// El teléfono es opcional en el local y para llevar, pero obligatorio a
+// domicilio (el repartidor necesita contactar al cliente). Si se escribe,
+// siempre debe ser válido.
+export function validateCustomerPhone(phone: string, required = false): string | null {
+  if (!phone.trim()) {
+    return required ? "El teléfono es obligatorio para pedidos a domicilio." : null;
+  }
   if (!PHONE_REGEX.test(stripPhone(phone))) {
     return "Ingresa un teléfono válido de 8 dígitos (ej. 7012-3456).";
   }
   return null;
+}
+
+export function validateDeliveryAddress(
+  address: string,
+  deliveryType: DeliveryType
+): string | null {
+  if (deliveryType !== "domicilio") return null;
+  const value = address.trim();
+  if (!value) return "La dirección es obligatoria para pedidos a domicilio.";
+  if (value.length < ORDER_LIMITS.addressMin) {
+    return "Escribe una dirección más completa (colonia, pasaje, número de casa).";
+  }
+  if (value.length > ORDER_LIMITS.addressMax) {
+    return `La dirección no puede pasar de ${ORDER_LIMITS.addressMax} caracteres.`;
+  }
+  return null;
+}
+
+export function validatePaymentMethod(
+  deliveryType: DeliveryType,
+  paymentMethod: PaymentMethod
+): string | null {
+  return isPaymentAllowed(deliveryType, paymentMethod) ? null : CARD_NOT_ALLOWED_MESSAGE;
 }
 
 export function validateNotes(notes: string): string | null {
@@ -86,13 +123,18 @@ export function validateItems(items: CreateOrderItemInput[]): string | null {
 
 export function validateCreateOrderInput(input: CreateOrderInput): OrderFieldErrors {
   const errors: OrderFieldErrors = {};
+  const isDelivery = input.deliveryType === "domicilio";
   const customerName = validateCustomerName(input.customerName);
-  const customerPhone = validateCustomerPhone(input.customerPhone ?? "");
+  const customerPhone = validateCustomerPhone(input.customerPhone ?? "", isDelivery);
+  const deliveryAddress = validateDeliveryAddress(input.deliveryAddress ?? "", input.deliveryType);
+  const paymentMethod = validatePaymentMethod(input.deliveryType, input.paymentMethod);
   const notes = validateNotes(input.notes ?? "");
   const items = validateItems(input.items);
 
   if (customerName) errors.customerName = customerName;
   if (customerPhone) errors.customerPhone = customerPhone;
+  if (deliveryAddress) errors.deliveryAddress = deliveryAddress;
+  if (paymentMethod) errors.paymentMethod = paymentMethod;
   if (notes) errors.notes = notes;
   if (items) errors.items = items;
   if (!input.createdBy.id || !input.createdBy.nombre.trim()) {
@@ -148,10 +190,22 @@ export function parseCreateOrderBody(body: unknown): ParseOrderResult {
     return { data: null, errors: { items: "Hay un platillo con datos incompletos." } };
   }
 
+  const { deliveryType, paymentMethod } = body;
+  if (!isDeliveryType(deliveryType)) {
+    return { data: null, errors: { deliveryType: "Elige un tipo de entrega válido." } };
+  }
+  if (!isPaymentMethod(paymentMethod)) {
+    return { data: null, errors: { paymentMethod: "Elige un método de pago válido." } };
+  }
+
   const customerPhone = optionalString(body.customerPhone);
   const input: CreateOrderInput = {
     customerName: typeof body.customerName === "string" ? body.customerName.trim() : "",
     customerPhone,
+    deliveryType,
+    // La dirección solo se guarda en pedidos a domicilio.
+    deliveryAddress: deliveryType === "domicilio" ? optionalString(body.deliveryAddress) : undefined,
+    paymentMethod,
     notes: optionalString(body.notes),
     items: items as CreateOrderItemInput[],
     createdBy: parseAuthor(body.createdBy),

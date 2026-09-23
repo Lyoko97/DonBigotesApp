@@ -3,19 +3,44 @@
 import { useState, type FormEvent } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useOrders } from "@/context/OrdersContext";
-import type { CreateOrderInput, OrderFieldErrors } from "@/types/order";
+import type {
+  CreateOrderInput,
+  DeliveryType,
+  OrderFieldErrors,
+  PaymentMethod,
+} from "@/types/order";
 import { hasErrors, ORDER_LIMITS, validateCreateOrderInput } from "@/lib/orderValidation";
+import {
+  CARD_NOT_ALLOWED_MESSAGE,
+  DELIVERY_TYPE_LABELS,
+  DELIVERY_TYPES,
+  isPaymentAllowed,
+  PAYMENT_METHOD_LABELS,
+  PAYMENT_METHODS,
+} from "@/lib/orderStatus";
 import { formatCurrency, roundMoney } from "@/lib/format";
 
 const inputClass =
   "w-full rounded-md border border-madera/30 bg-white px-3 py-2 text-sm text-stone-900 focus:border-vino focus:outline-none focus:ring-2 focus:ring-vino/30";
 
+function optionClass(isSelected: boolean, isDisabled = false) {
+  if (isDisabled) {
+    return "cursor-not-allowed border-stone-200 bg-stone-50 text-stone-400";
+  }
+  return isSelected
+    ? "cursor-pointer border-vino bg-vino text-white"
+    : "cursor-pointer border-madera/30 bg-white text-madera hover:bg-crema";
+}
+
 export default function OrderForm() {
   const { user } = useAuth();
-  const { dishes, createOrder } = useOrders();
+  const { dishes, isLoading, createOrder } = useOrders();
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [deliveryType, setDeliveryType] = useState<DeliveryType>("local");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("efectivo");
   const [notes, setNotes] = useState("");
   // Cantidad elegida por id de platillo.
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -50,9 +75,19 @@ export default function OrderForm() {
     });
   }
 
+  function changeDeliveryType(next: DeliveryType) {
+    setDeliveryType(next);
+    // Si ya estaba elegida la tarjeta y pasa a domicilio, se cambia a
+    // efectivo (el POS solo está en el local).
+    if (!isPaymentAllowed(next, paymentMethod)) setPaymentMethod("efectivo");
+  }
+
   function resetForm() {
     setCustomerName("");
     setCustomerPhone("");
+    setDeliveryType("local");
+    setDeliveryAddress("");
+    setPaymentMethod("efectivo");
     setNotes("");
     setQuantities({});
     setErrors({});
@@ -67,6 +102,10 @@ export default function OrderForm() {
     const input: CreateOrderInput = {
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim() || undefined,
+      deliveryType,
+      deliveryAddress:
+        deliveryType === "domicilio" ? deliveryAddress.trim() || undefined : undefined,
+      paymentMethod,
       notes: notes.trim() || undefined,
       items: selected.map(({ dish, quantity }) => ({
         dishId: dish.id,
@@ -126,7 +165,10 @@ export default function OrderForm() {
         </div>
         <div>
           <label htmlFor="customerPhone" className="mb-1 block text-sm font-medium text-madera">
-            Teléfono <span className="font-normal text-madera/70">(opcional)</span>
+            Teléfono{" "}
+            {deliveryType !== "domicilio" && (
+              <span className="font-normal text-madera/70">(opcional)</span>
+            )}
           </label>
           <input
             id="customerPhone"
@@ -152,14 +194,107 @@ export default function OrderForm() {
             onChange={(e) => setNotes(e.target.value)}
             maxLength={ORDER_LIMITS.notesMax}
             className={inputClass}
-            placeholder="Para llevar, sin cebolla..."
+            placeholder="Sin cebolla, cambio de $20..."
           />
           {errors.notes && <p className="mt-1 text-sm text-red-700">{errors.notes}</p>}
         </div>
       </div>
 
+      <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <fieldset>
+          <legend className="mb-1 text-sm font-medium text-madera">Tipo de entrega</legend>
+          <div className="flex flex-wrap gap-2">
+            {DELIVERY_TYPES.map((type) => (
+              <label
+                key={type}
+                className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-vino/30 ${optionClass(
+                  deliveryType === type
+                )}`}
+              >
+                <input
+                  type="radio"
+                  name="deliveryType"
+                  value={type}
+                  checked={deliveryType === type}
+                  onChange={() => changeDeliveryType(type)}
+                  className="sr-only"
+                />
+                {DELIVERY_TYPE_LABELS[type]}
+              </label>
+            ))}
+          </div>
+          {errors.deliveryType && (
+            <p className="mt-1 text-sm text-red-700">{errors.deliveryType}</p>
+          )}
+        </fieldset>
+
+        <fieldset>
+          <legend className="mb-1 text-sm font-medium text-madera">Método de pago</legend>
+          <div className="flex flex-wrap gap-2">
+            {PAYMENT_METHODS.map((method) => {
+              const isDisabled = !isPaymentAllowed(deliveryType, method);
+              return (
+                <label
+                  key={method}
+                  className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-vino/30 ${optionClass(
+                    paymentMethod === method,
+                    isDisabled
+                  )}`}
+                >
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value={method}
+                    checked={paymentMethod === method}
+                    disabled={isDisabled}
+                    aria-describedby={isDisabled ? "card-not-allowed" : undefined}
+                    onChange={() => setPaymentMethod(method)}
+                    className="sr-only"
+                  />
+                  {PAYMENT_METHOD_LABELS[method]}
+                </label>
+              );
+            })}
+          </div>
+          {deliveryType === "domicilio" && (
+            <p id="card-not-allowed" className="mt-1 text-xs text-madera">
+              {CARD_NOT_ALLOWED_MESSAGE}
+            </p>
+          )}
+          {errors.paymentMethod && (
+            <p className="mt-1 text-sm text-red-700">{errors.paymentMethod}</p>
+          )}
+        </fieldset>
+      </div>
+
+      {deliveryType === "domicilio" && (
+        <div className="mb-4">
+          <label htmlFor="deliveryAddress" className="mb-1 block text-sm font-medium text-madera">
+            Dirección de entrega
+          </label>
+          <input
+            id="deliveryAddress"
+            type="text"
+            value={deliveryAddress}
+            onChange={(e) => setDeliveryAddress(e.target.value)}
+            maxLength={ORDER_LIMITS.addressMax}
+            className={inputClass}
+            placeholder="Col. Las Brisas, pasaje 3, casa #12"
+          />
+          {errors.deliveryAddress && (
+            <p className="mt-1 text-sm text-red-700">{errors.deliveryAddress}</p>
+          )}
+        </div>
+      )}
+
       <p className="mb-2 text-sm font-medium text-madera">Platillos</p>
-      {dishes.length === 0 ? (
+      {isLoading ? (
+        <ul className="grid animate-pulse grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Cargando platillos">
+          {Array.from({ length: 4 }, (_, index) => (
+            <li key={index} className="h-[3.25rem] rounded-md border border-madera/10 bg-hueso" />
+          ))}
+        </ul>
+      ) : dishes.length === 0 ? (
         <p className="rounded-md bg-crema px-3 py-2 text-sm text-madera">
           No hay platillos en el menú todavía. Agrégalos desde la sección Menú.
         </p>

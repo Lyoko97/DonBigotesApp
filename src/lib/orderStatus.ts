@@ -1,4 +1,36 @@
-import type { OrderStatus } from "@/types/order";
+import type { DeliveryType, OrderStatus, PaymentMethod } from "@/types/order";
+
+export const DELIVERY_TYPES: DeliveryType[] = ["local", "para_llevar", "domicilio"];
+
+export const DELIVERY_TYPE_LABELS: Record<DeliveryType, string> = {
+  local: "Comer en el local",
+  para_llevar: "Para llevar",
+  domicilio: "A domicilio",
+};
+
+export const PAYMENT_METHODS: PaymentMethod[] = ["efectivo", "tarjeta"];
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  efectivo: "Efectivo",
+  tarjeta: "Tarjeta",
+};
+
+// El POS para cobrar con tarjeta está solo en el local: un repartidor no
+// puede cobrar con tarjeta en la puerta del cliente.
+export function isPaymentAllowed(deliveryType: DeliveryType, payment: PaymentMethod): boolean {
+  return !(deliveryType === "domicilio" && payment === "tarjeta");
+}
+
+export const CARD_NOT_ALLOWED_MESSAGE =
+  "El pago con tarjeta no está disponible a domicilio: el POS solo está en el local.";
+
+export function isDeliveryType(value: unknown): value is DeliveryType {
+  return typeof value === "string" && (DELIVERY_TYPES as string[]).includes(value);
+}
+
+export function isPaymentMethod(value: unknown): value is PaymentMethod {
+  return typeof value === "string" && (PAYMENT_METHODS as string[]).includes(value);
+}
 
 export const ORDER_STATUSES: OrderStatus[] = [
   "pendiente",

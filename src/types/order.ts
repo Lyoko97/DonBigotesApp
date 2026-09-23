@@ -26,11 +26,22 @@ export interface OrderAuthor {
   nombre: string;
 }
 
+// "local": se consume en el comedor; "para_llevar": el cliente lo recoge;
+// "domicilio": se entrega en la dirección del cliente.
+export type DeliveryType = "local" | "para_llevar" | "domicilio";
+
+// El POS para cobrar con tarjeta solo está en el local, así que "tarjeta"
+// no es válido para pedidos a domicilio (ver src/lib/orderValidation.ts).
+export type PaymentMethod = "efectivo" | "tarjeta";
+
 export interface Order {
   id: string;
   number: number; // Número corto y legible de la comanda (#0001)
   customerName: string;
   customerPhone?: string;
+  deliveryType: DeliveryType;
+  deliveryAddress?: string; // Solo para "domicilio"
+  paymentMethod: PaymentMethod;
   notes?: string;
   items: OrderItem[];
   total: number;
@@ -45,12 +56,23 @@ export type CreateOrderItemInput = Omit<OrderItem, "subtotal">;
 export interface CreateOrderInput {
   customerName: string;
   customerPhone?: string;
+  deliveryType: DeliveryType;
+  deliveryAddress?: string;
+  paymentMethod: PaymentMethod;
   notes?: string;
   items: CreateOrderItemInput[];
   createdBy: OrderAuthor;
 }
 
-export type OrderField = "customerName" | "customerPhone" | "notes" | "items" | "general";
+export type OrderField =
+  | "customerName"
+  | "customerPhone"
+  | "deliveryType"
+  | "deliveryAddress"
+  | "paymentMethod"
+  | "notes"
+  | "items"
+  | "general";
 
 export type OrderFieldErrors = Partial<Record<OrderField, string>>;
 
