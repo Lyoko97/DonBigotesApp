@@ -135,7 +135,9 @@ function createSeedStore(): OrdersStore {
 }
 
 function getStore(): OrdersStore {
-  globalForOrders.__donBigotesOrdersStore ??= createSeedStore();
+  if (!globalForOrders.__donBigotesOrdersStore) {
+    globalForOrders.__donBigotesOrdersStore = createSeedStore();
+  }
   return globalForOrders.__donBigotesOrdersStore;
 }
 
