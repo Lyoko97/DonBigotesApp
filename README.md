@@ -21,7 +21,12 @@ Persistencia de datos por módulo:
   servidor (sin base de datos) podrían no ser 100% consistentes bajo alta
   concurrencia o tras un cold start prolongado. Se reemplazará por una base de
   datos real en una etapa posterior.
-- **Pedidos:** pendiente.
+- **Pedidos:** API REST propia (`/api/orders`) con un store en memoria
+  (`src/lib/ordersStore.ts`) que simula la tabla "pedidos" de PostgreSQL e
+  incluye pedidos de ejemplo del día. En Vercel **no persiste entre
+  instancias**: un cold start vuelve a los datos de ejemplo y dos instancias
+  activas pueden mostrar listas distintas. Registrar un pedido todavía no
+  descuenta stock del platillo (TODO para la etapa con base de datos).
 
 ## Desarrollo local
 
@@ -53,8 +58,32 @@ del equipo (encargados u otros admins).
 - `src/proxy.ts` — protege `/dashboard`, `/menu` y `/pedidos` a nivel de ruta
 
 `/menu` está completamente implementado: CRUD de platillos con integración
-a la API REST. `/pedidos` es un placeholder protegido ("en construcción"),
-pendiente del tercer integrante del equipo.
+a la API REST.
+
+### Pedidos y dashboard
+
+- `/pedidos`: registrar pedidos (solo con platillos disponibles), filtrar
+  por estado, avanzar la comanda (pendiente → en preparación → listo →
+  entregado), cancelar y, solo el `admin`, eliminar definitivamente.
+- `/dashboard`: pedidos del día, platillos disponibles y ventas del día para
+  todos; ingresos, ticket promedio y platillos más vendidos solo para `admin`.
+- Ambas vistas se sincronizan cada 10 s mientras la pestaña está visible y
+  se revalidan después de cada acción (`src/context/OrdersContext.tsx`).
+- Capas: tipos en `src/types/order.ts`, datos en `src/lib/ordersStore.ts` y
+  `src/app/api/orders`, cliente en `src/services` + `src/hooks` +
+  `src/context/OrdersContext.tsx`, UI en `src/components/orders` y
+  `src/components/dashboard`.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/orders?status=&date=today` | Lista pedidos (más recientes primero) |
+| POST | `/api/orders` | Crea un pedido en estado `pendiente` |
+| PATCH | `/api/orders/:id` | Cambia el estado (`{ "status": "listo" }`) |
+| DELETE | `/api/orders/:id` | Elimina el pedido |
+
+Las rutas responden `401` sin cookie de sesión. El permiso de borrado del
+admin se aplica en la UI: la cookie mock solo guarda el id del usuario, no su
+rol (TODO: validar un JWT con rol cuando exista el backend real).
 
 ## Despliegue
 
