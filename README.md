@@ -1,14 +1,19 @@
 # DonBigotesApp — Web (Etapa 2)
 
 Panel web administrativo para el Comedor "Don Bigotes" (Colonia Las Brisas,
-Soyapango). Proyecto de capstone — Etapa 2: base de Next.js con
-autenticación, roles y estructura para los módulos de menú y pedidos.
+Soyapango). Proyecto de capstone — Etapa 2: aplicación Next.js con
+autenticación y roles, gestión del menú, registro y seguimiento de pedidos,
+y un dashboard con el resumen del día.
+
+- Manual de usuario del módulo de pedidos y dashboard:
+  [`docs/manual-usuario-pedidos.md`](docs/manual-usuario-pedidos.md)
 
 ## Stack
 
 - [Next.js 16](https://nextjs.org) (App Router) + TypeScript
 - [Tailwind CSS 4](https://tailwindcss.com)
-- Context API para autenticación y roles (sin Redux)
+- Context API para autenticación, roles y estado de pedidos (sin Redux)
+- axios para consumir las rutas de la API REST
 
 Persistencia de datos por módulo:
 
@@ -30,6 +35,8 @@ Persistencia de datos por módulo:
 
 ## Desarrollo local
 
+Requisito: Node.js 20.9 o superior (probado con Node 24 LTS).
+
 ```bash
 npm install
 npm run dev
@@ -50,29 +57,59 @@ del equipo (encargados u otros admins).
 
 ## Estructura
 
-- `src/app/(login|register|dashboard|menu|pedidos)` — páginas
-- `src/context/AuthContext.tsx` — Context API: `login`, `register`,
-  `logout`, usuario y rol actuales
-- `src/components/` — `Navbar`, `ProtectedRoute`, formularios
-- `src/lib/` — lógica de datos mock y validación de formularios
-- `src/proxy.ts` — protege `/dashboard`, `/menu` y `/pedidos` a nivel de ruta
+Separación por capas:
+
+| Capa | Ubicación |
+|---|---|
+| Tipos | `src/types/` — `auth.ts`, `dish.ts`, `order.ts`, `dashboard.ts` |
+| Datos / API | `src/app/api/` (`dishes`, `orders`) y `src/lib/` (stores en memoria, validación, cálculos del dashboard) |
+| Lógica de cliente | `src/services/` (llamadas axios), `src/hooks/` (`usePolling`) y `src/context/` (`AuthContext`, `OrdersContext`) |
+| UI | `src/components/` (`Navbar`, `ProtectedRoute`, `forms/`, `orders/`, `dashboard/`) y páginas en `src/app/(login\|register\|dashboard\|menu\|pedidos)` |
+
+- `src/proxy.ts` — protege `/dashboard`, `/menu`, `/pedidos` y `/register`
+  a nivel de ruta; `ProtectedRoute` aplica además los permisos por rol en el
+  cliente.
 
 `/menu` está completamente implementado: CRUD de platillos con integración
 a la API REST.
 
 ### Pedidos y dashboard
 
-- `/pedidos`: registrar pedidos (solo con platillos disponibles), filtrar
-  por estado, avanzar la comanda (pendiente → en preparación → listo →
-  entregado), cancelar y, solo el `admin`, eliminar definitivamente.
-- `/dashboard`: pedidos del día, platillos disponibles y ventas del día para
-  todos; ingresos, ticket promedio y platillos más vendidos solo para `admin`.
-- Ambas vistas se sincronizan cada 10 s mientras la pestaña está visible y
-  se revalidan después de cada acción (`src/context/OrdersContext.tsx`).
-- Capas: tipos en `src/types/order.ts`, datos en `src/lib/ordersStore.ts` y
-  `src/app/api/orders`, cliente en `src/services` + `src/hooks` +
-  `src/context/OrdersContext.tsx`, UI en `src/components/orders` y
-  `src/components/dashboard`.
+**`/pedidos`**
+
+- Registro de pedidos con cliente, teléfono y notas opcionales, y selección
+  de platillos con cantidades y total en vivo. Solo se ofrecen platillos
+  disponibles; los agotados se ven bloqueados.
+- Flujo de estados: `pendiente → en_preparacion → listo → entregado`, y
+  `cancelado` desde cualquier estado en curso. Las transiciones inválidas se
+  rechazan en el servidor (`409`).
+- Filtro por estado con conteos y opción "Solo pedidos de hoy".
+- Cancelar conserva el pedido en el historial; eliminar es definitivo y solo
+  lo ve el `admin`.
+
+**`/dashboard`**
+
+| Indicador | Encargado | Admin |
+|---|:---:|:---:|
+| Pedidos de hoy (en curso / cancelados) | ✔ | ✔ |
+| Platillos disponibles | ✔ | ✔ |
+| Ventas del día (pedidos entregados) | ✔ | ✔ |
+| Últimos 5 pedidos | ✔ | ✔ |
+| Ingresos cobrados, por cobrar y ticket promedio | — | ✔ |
+| Top 5 de platillos más vendidos | — | ✔ |
+
+**Actualización dinámica:** `OrdersContext` consulta `/api/orders` y
+`/api/dishes` al entrar, cada 10 s mientras la pestaña está visible, al
+volver a la pestaña y después de cada acción. Si dos respuestas se solapan
+solo se aplica la más reciente.
+
+**Validación:** las mismas reglas (`src/lib/orderValidation.ts`) se usan en
+el formulario y en la API: nombre de 2 a 60 caracteres, teléfono salvadoreño
+de 8 dígitos opcional, notas de hasta 200 caracteres, de 1 a 20 platillos
+distintos y de 1 a 50 unidades por platillo.
+
+**"Hoy"** se calcula con la zona horaria `America/El_Salvador`, porque los
+servidores de Vercel corren en UTC.
 
 | Método | Ruta | Descripción |
 |---|---|---|
@@ -96,3 +133,24 @@ La aplicación está desplegada en Vercel:
 npm run lint
 npm run build
 ```
+
+Prueba manual del módulo de pedidos:
+
+1. Iniciar sesión como `encargado`, registrar un pedido en `/pedidos`,
+   avanzarlo de estado y cancelar otro. No debe aparecer "Eliminar".
+2. Marcar un platillo como agotado en `/menu`: en `/pedidos` debe verse
+   bloqueado en unos 10 s.
+3. Iniciar sesión como `admin`: en `/dashboard` deben verse ingresos y
+   platillos más vendidos, y en `/pedidos` el botón "Eliminar".
+4. Sin sesión, `/pedidos` redirige a `/login` y `/api/orders` responde `401`.
+
+## Limitaciones conocidas (Etapa 2)
+
+- Menú y pedidos se guardan en memoria del servidor: en Vercel no persisten
+  entre instancias ni tras un cold start, y las dos APIs no comparten
+  memoria (por eso cada pedido guarda su propia copia de nombre y precio).
+- La cookie de sesión mock solo contiene el id del usuario: los permisos por
+  rol se aplican en la UI, no en la API.
+- Registrar un pedido no descuenta stock.
+- Los usuarios creados desde `/register` viven en la memoria del navegador y
+  se pierden al recargar la página.
