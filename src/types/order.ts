@@ -85,7 +85,8 @@ export interface OrderActionResult {
 export interface OrdersContextValue {
   orders: Order[];
   dishes: Dish[];
-  isLoading: boolean;
+  isLoading: boolean; // Primera carga (sin datos todavía)
+  isRefreshing: boolean; // Sincronización en curso con datos ya cargados
   error: string | null;
   lastUpdated: Date | null;
   // Fecha del negocio ("YYYY-MM-DD" en hora de El Salvador) de la última

@@ -1,38 +1,36 @@
 "use client";
 
-import { useState } from "react";
 import { useOrders } from "@/context/OrdersContext";
-import { formatTime } from "@/lib/format";
+import { useNow } from "@/hooks/useNow";
+import { formatRelativeTime } from "@/lib/format";
 
 // Indicador de la última sincronización + botón para actualizar a mano.
 export default function SyncStatus() {
-  const { lastUpdated, error, refresh } = useOrders();
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { lastUpdated, isLoading, isRefreshing, refresh } = useOrders();
+  const now = useNow();
 
-  async function handleRefresh() {
-    setIsRefreshing(true);
-    await refresh();
-    setIsRefreshing(false);
-  }
+  let label = "Sincronizando...";
+  if (lastUpdated && now > 0) label = `Actualizado ${formatRelativeTime(lastUpdated, now)}`;
 
   return (
-    <div className="flex flex-col items-start gap-2 sm:items-end">
-      <div className="flex items-center gap-3 text-sm text-madera">
-        <span>
-          {lastUpdated ? `Actualizado ${formatTime(lastUpdated)}` : "Sincronizando..."}
-        </span>
-        <button
-          type="button"
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-          className="rounded-md border border-madera/30 bg-white px-3 py-1 text-xs font-semibold text-madera transition-colors hover:bg-crema disabled:opacity-60"
-        >
-          {isRefreshing ? "Actualizando..." : "Actualizar"}
-        </button>
-      </div>
-      {error && (
-        <p className="rounded-md bg-red-50 px-3 py-1.5 text-sm text-red-700">{error}</p>
-      )}
+    <div className="flex items-center gap-3 text-sm text-madera" aria-live="polite">
+      <span className="flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          className={`inline-block h-2 w-2 rounded-full ${
+            isRefreshing ? "animate-pulse bg-cobre" : "bg-green-600"
+          }`}
+        />
+        {label}
+      </span>
+      <button
+        type="button"
+        onClick={() => void refresh()}
+        disabled={isLoading || isRefreshing}
+        className="rounded-md border border-madera/30 bg-white px-3 py-1 text-xs font-semibold text-madera transition-colors hover:bg-crema disabled:opacity-60"
+      >
+        {isRefreshing ? "Actualizando..." : "Actualizar"}
+      </button>
     </div>
   );
 }

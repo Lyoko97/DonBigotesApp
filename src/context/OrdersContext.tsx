@@ -32,6 +32,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [dishes, setDishes] = useState<Dish[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
@@ -42,6 +43,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     const requestId = ++latestRequest.current;
+    setIsRefreshing(true);
     try {
       const [nextOrders, nextDishes] = await Promise.all([
         ordersService.fetchOrders(),
@@ -57,7 +59,10 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       // Se conservan los últimos datos buenos y solo se avisa del error.
       setError(getApiErrorMessage(err, "No se pudieron actualizar los pedidos."));
     } finally {
-      if (requestId === latestRequest.current) setIsLoading(false);
+      if (requestId === latestRequest.current) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     }
   }, []);
 
@@ -81,22 +86,46 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     [refresh]
   );
 
+  // Actualización optimista: la tarjeta cambia de estado al instante y, si
+  // el servidor rechaza el cambio o no responde, se revierte al estado
+  // anterior.
   const updateStatus = useCallback(
     async (id: string, status: OrderStatus): Promise<OrderActionResult> => {
+      const previous = orders.find((order) => order.id === id);
+      if (!previous) {
+        return { success: false, error: "El pedido no existe o ya fue eliminado." };
+      }
+
+      // Cualquier sincronización en curso trae datos anteriores a este
+      // cambio: se invalida para que no pise el estado optimista.
+      latestRequest.current++;
+      setOrders((current) =>
+        current.map((order) =>
+          order.id === id ? { ...order, status, updatedAt: new Date().toISOString() } : order
+        )
+      );
+
       try {
-        await ordersService.updateOrderStatus(id, status);
-        await refresh();
+        const saved = await ordersService.updateOrderStatus(id, status);
+        setOrders((current) => current.map((order) => (order.id === id ? saved : order)));
+        void refresh();
         return { success: true };
       } catch (err) {
-        // Si otro usuario ya lo movió, refrescar muestra el estado real.
-        await refresh();
+        // Rollback: solo si nadie más cambió ese pedido mientras tanto.
+        setOrders((current) =>
+          current.map((order) =>
+            order.id === id && order.status === status ? previous : order
+          )
+        );
+        // Si otro usuario ya lo movió (409), refrescar muestra el estado real.
+        void refresh();
         return {
           success: false,
           error: getApiErrorMessage(err, "No se pudo actualizar el pedido."),
         };
       }
     },
-    [refresh]
+    [orders, refresh]
   );
 
   const cancelOrder = useCallback(
@@ -126,6 +155,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       orders,
       dishes,
       isLoading,
+      isRefreshing,
       error,
       lastUpdated,
       todayKey: lastUpdated ? toBusinessDateKey(lastUpdated) : null,
@@ -135,7 +165,19 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       cancelOrder,
       deleteOrder,
     }),
-    [orders, dishes, isLoading, error, lastUpdated, refresh, createOrder, updateStatus, cancelOrder, deleteOrder]
+    [
+      orders,
+      dishes,
+      isLoading,
+      isRefreshing,
+      error,
+      lastUpdated,
+      refresh,
+      createOrder,
+      updateStatus,
+      cancelOrder,
+      deleteOrder,
+    ]
   );
 
   return <OrdersContext.Provider value={value}>{children}</OrdersContext.Provider>;
