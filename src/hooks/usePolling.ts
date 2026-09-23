@@ -2,10 +2,10 @@
 
 import { useEffect, useRef } from "react";
 
-// Ejecuta `callback` cada `intervalMs` mientras la pestaña esté visible, y
-// una vez más en cuanto el usuario vuelve a ella (cambio de pestaña o foco
-// de la ventana). Así la vista se mantiene al día sin gastar invocaciones
-// del servidor cuando nadie la está mirando.
+// Ejecuta `callback` al montarse, luego cada `intervalMs` mientras la
+// pestaña esté visible, y una vez más en cuanto el usuario vuelve a ella
+// (cambio de pestaña o foco de la ventana). Así la vista se mantiene al día
+// sin gastar invocaciones del servidor cuando nadie la está mirando.
 export function usePolling(callback: () => unknown, intervalMs: number, enabled = true) {
   const callbackRef = useRef(callback);
 
@@ -22,6 +22,7 @@ export function usePolling(callback: () => unknown, intervalMs: number, enabled 
       }
     };
 
+    void callbackRef.current();
     const intervalId = window.setInterval(runIfVisible, intervalMs);
     document.addEventListener("visibilitychange", runIfVisible);
     window.addEventListener("focus", runIfVisible);

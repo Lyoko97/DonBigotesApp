@@ -4,7 +4,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -62,10 +61,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
+  // Carga inicial + sincronización periódica.
   usePolling(refresh, ORDERS_POLL_INTERVAL_MS);
 
   const createOrder = useCallback(
