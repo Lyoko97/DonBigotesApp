@@ -6,20 +6,25 @@ import Navbar from "@/components/Navbar";
 import { OrdersProvider, useOrders } from "@/context/OrdersContext";
 import OrderForm from "@/components/orders/OrderForm";
 import OrderList from "@/components/orders/OrderList";
+import OrderListSkeleton from "@/components/orders/OrderListSkeleton";
 import OrderStatusFilter, { type StatusFilterValue } from "@/components/orders/OrderStatusFilter";
+import OrderDateFilter from "@/components/orders/OrderDateFilter";
+import { matchesDateFilter, type DateFilterValue } from "@/lib/orderFilters";
 import SyncStatus from "@/components/orders/SyncStatus";
-import { ORDER_STATUSES } from "@/lib/orderStatus";
+import SyncErrorBanner from "@/components/orders/SyncErrorBanner";
+import { ORDER_STATUS_LABELS, ORDER_STATUSES } from "@/lib/orderStatus";
 import { toBusinessDateKey } from "@/lib/format";
 
 function PedidosContent() {
   const { orders, isLoading, todayKey } = useOrders();
   const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("todos");
-  const [onlyToday, setOnlyToday] = useState(true);
+  const [dateFilter, setDateFilter] = useState<DateFilterValue>({ preset: "hoy", customDate: "" });
 
-  const ordersInRange =
-    onlyToday && todayKey
-      ? orders.filter((order) => toBusinessDateKey(order.createdAt) === todayKey)
-      : orders;
+  const ordersInRange = todayKey
+    ? orders.filter((order) =>
+        matchesDateFilter(toBusinessDateKey(order.createdAt), dateFilter, todayKey)
+      )
+    : orders;
 
   const counts = { todos: ordersInRange.length } as Record<StatusFilterValue, number>;
   for (const status of ORDER_STATUSES) {
@@ -31,6 +36,12 @@ function PedidosContent() {
       ? ordersInRange
       : ordersInRange.filter((order) => order.status === statusFilter);
 
+  const hasFilters = statusFilter !== "todos" || dateFilter.preset !== "todas";
+  const emptyTitle =
+    statusFilter === "todos"
+      ? "No hay pedidos en este rango de fechas."
+      : `No hay pedidos "${ORDER_STATUS_LABELS[statusFilter]}" en este rango de fechas.`;
+
   return (
     <main className="mx-auto w-full max-w-5xl p-6">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -41,30 +52,25 @@ function PedidosContent() {
         <SyncStatus />
       </div>
 
+      <SyncErrorBanner />
+
       <OrderForm />
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-4 flex flex-col gap-3">
+        <OrderDateFilter value={dateFilter} onChange={setDateFilter} todayKey={todayKey} />
         <OrderStatusFilter value={statusFilter} onChange={setStatusFilter} counts={counts} />
-        <label className="flex shrink-0 items-center gap-2 text-sm text-madera">
-          <input
-            type="checkbox"
-            checked={onlyToday}
-            onChange={(e) => setOnlyToday(e.target.checked)}
-            className="h-4 w-4 accent-vino"
-          />
-          Solo pedidos de hoy
-        </label>
       </div>
 
       {isLoading ? (
-        <div className="p-8 text-center text-madera">Cargando pedidos de Don Bigotes...</div>
+        <OrderListSkeleton />
       ) : (
         <OrderList
           orders={visibleOrders}
-          emptyMessage={
-            statusFilter === "todos"
-              ? "Todavía no hay pedidos registrados."
-              : "No hay pedidos con este estado."
+          emptyTitle={emptyTitle}
+          emptyHint={
+            hasFilters
+              ? "Prueba con otra fecha u otro estado, o registra un pedido nuevo arriba."
+              : "Registra el primer pedido con el formulario de arriba."
           }
         />
       )}
