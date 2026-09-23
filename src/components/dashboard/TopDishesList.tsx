@@ -1,14 +1,14 @@
 import type { TopDish } from "@/types/dashboard";
 import { formatCurrency } from "@/lib/format";
 
-export default function TopDishesList({ dishes }: { dishes: TopDish[] }) {
+export default function TopDishesList({ dishes, title }: { dishes: TopDish[]; title: string }) {
   const maxQuantity = Math.max(1, ...dishes.map((dish) => dish.quantity));
 
   return (
     <section className="rounded-xl border border-madera/20 bg-white p-5 shadow-sm">
-      <h2 className="mb-4 text-lg font-bold text-vino">Platillos más vendidos hoy</h2>
+      <h2 className="mb-4 text-lg font-bold text-vino">{title}</h2>
       {dishes.length === 0 ? (
-        <p className="text-sm text-madera">Aún no hay ventas registradas hoy.</p>
+        <p className="text-sm text-madera">Aún no hay ventas registradas en este periodo.</p>
       ) : (
         <ol className="flex flex-col gap-3">
           {dishes.map((dish, index) => (
