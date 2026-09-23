@@ -27,8 +27,10 @@ Persistencia de datos por módulo:
   concurrencia o tras un cold start prolongado. Se reemplazará por una base de
   datos real en una etapa posterior.
 - **Pedidos:** API REST propia (`/api/orders`) con un store en memoria
-  (`src/lib/ordersStore.ts`) que simula la tabla "pedidos" de PostgreSQL e
-  incluye pedidos de ejemplo del día. En Vercel **no persiste entre
+  (`src/lib/ordersStore.ts`) que simula la tabla "pedidos" de PostgreSQL.
+  Arranca con pedidos de ejemplo de hoy y un historial determinista de 5
+  semanas (`src/lib/ordersSeed.ts`), igual en cada instancia, para que el
+  dashboard tenga ventas de la semana y del mes. En Vercel **no persiste entre
   instancias**: un cold start vuelve a los datos de ejemplo y dos instancias
   activas pueden mostrar listas distintas. Registrar un pedido todavía no
   descuenta stock del platillo (TODO para la etapa con base de datos).
@@ -77,13 +79,20 @@ a la API REST.
 
 **`/pedidos`**
 
-- Registro de pedidos con cliente, teléfono y notas opcionales, y selección
-  de platillos con cantidades y total en vivo. Solo se ofrecen platillos
-  disponibles; los agotados se ven bloqueados.
+- Registro de pedidos con cliente, teléfono, tipo de entrega (en el local,
+  para llevar o a domicilio), método de pago (efectivo o tarjeta), notas y
+  selección de platillos con cantidades y total en vivo. Los platillos
+  agotados se ven pero están bloqueados.
+- **Tarjeta deshabilitada a domicilio:** el POS solo está en el local, así
+  que la opción "Tarjeta" no se puede elegir para pedidos a domicilio (se
+  explica en el formulario y la API lo rechaza con `400`).
 - Flujo de estados: `pendiente → en_preparacion → listo → entregado`, y
   `cancelado` desde cualquier estado en curso. Las transiciones inválidas se
   rechazan en el servidor (`409`).
-- Filtro por estado con conteos y opción "Solo pedidos de hoy".
+- Filtros por fecha (Hoy, Ayer, Últimos 7 días, Todas o una fecha
+  específica) y por estado, con contadores.
+- Skeleton durante la primera carga, estado vacío según los filtros, banner
+  de error con "Reintentar" e indicador "Actualizado hace X s".
 - Cancelar conserva el pedido en el historial; eliminar es definitivo y solo
   lo ve el `admin`.
 
@@ -91,22 +100,30 @@ a la API REST.
 
 | Indicador | Encargado | Admin |
 |---|:---:|:---:|
-| Pedidos de hoy (en curso / cancelados) | ✔ | ✔ |
-| Platillos disponibles | ✔ | ✔ |
-| Ventas del día (pedidos entregados) | ✔ | ✔ |
-| Últimos 5 pedidos | ✔ | ✔ |
-| Ingresos cobrados, por cobrar y ticket promedio | — | ✔ |
-| Top 5 de platillos más vendidos | — | ✔ |
+| Pedidos de hoy, pedidos activos, platillos disponibles, ventas del día | ✔ | ✔ |
+| Lista de pedidos activos (el más antiguo primero) | ✔ | ✔ |
+| Ingresos de hoy (y por cobrar), de la semana y del mes | — | ✔ |
+| Ticket promedio del mes | — | ✔ |
+| Gráfico de ingresos de los últimos 7 días (con vista de tabla) | — | ✔ |
+| Top 5 de platillos (7 días) y distribución de pedidos de hoy por estado | — | ✔ |
 
-**Actualización dinámica:** `OrdersContext` consulta `/api/orders` y
-`/api/dishes` al entrar, cada 10 s mientras la pestaña está visible, al
-volver a la pestaña y después de cada acción. Si dos respuestas se solapan
-solo se aplica la más reciente.
+La semana va de lunes a hoy y el mes del día 1 a hoy; las ventas cuentan
+solo pedidos entregados.
+
+**Actualización dinámica:** `OrdersContext` expone `isLoading`,
+`isRefreshing`, `error` y `lastUpdated`. Consulta `/api/orders` y
+`/api/dishes` al entrar, cada 10 s mientras la pestaña está visible (el
+polling se pausa si está oculta), al volver a la pestaña y después de cada
+acción. Si dos respuestas se solapan solo se aplica la más reciente. Los
+cambios de estado son **optimistas**: la tarjeta cambia al instante y se
+revierte si el servidor rechaza el cambio o no responde.
 
 **Validación:** las mismas reglas (`src/lib/orderValidation.ts`) se usan en
-el formulario y en la API: nombre de 2 a 60 caracteres, teléfono salvadoreño
-de 8 dígitos opcional, notas de hasta 200 caracteres, de 1 a 20 platillos
-distintos y de 1 a 50 unidades por platillo.
+el formulario y en la API: nombre de 2 a 60 caracteres; teléfono salvadoreño
+de 8 dígitos (obligatorio a domicilio); dirección de 10 a 150 caracteres
+(obligatoria a domicilio); tarjeta no permitida a domicilio; notas de hasta
+200 caracteres; de 1 a 20 platillos distintos y de 1 a 50 unidades por
+platillo.
 
 **"Hoy"** se calcula con la zona horaria `America/El_Salvador`, porque los
 servidores de Vercel corren en UTC.
@@ -114,7 +131,7 @@ servidores de Vercel corren en UTC.
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/api/orders?status=&date=today` | Lista pedidos (más recientes primero) |
-| POST | `/api/orders` | Crea un pedido en estado `pendiente` |
+| POST | `/api/orders` | Crea un pedido en estado `pendiente` (incluye `deliveryType`, `paymentMethod` y, a domicilio, `deliveryAddress`) |
 | PATCH | `/api/orders/:id` | Cambia el estado (`{ "status": "listo" }`) |
 | DELETE | `/api/orders/:id` | Elimina el pedido |
 
@@ -138,11 +155,17 @@ Prueba manual del módulo de pedidos:
 
 1. Iniciar sesión como `encargado`, registrar un pedido en `/pedidos`,
    avanzarlo de estado y cancelar otro. No debe aparecer "Eliminar".
-2. Marcar un platillo como agotado en `/menu`: en `/pedidos` debe verse
+2. En el formulario, elegir "Tarjeta" y luego "A domicilio": el pago debe
+   pasar a "Efectivo", "Tarjeta" queda bloqueada con el aviso del POS y se
+   piden dirección y teléfono.
+3. Marcar un platillo como agotado en `/menu`: en `/pedidos` debe verse
    bloqueado en unos 10 s.
-3. Iniciar sesión como `admin`: en `/dashboard` deben verse ingresos y
-   platillos más vendidos, y en `/pedidos` el botón "Eliminar".
-4. Sin sesión, `/pedidos` redirige a `/login` y `/api/orders` responde `401`.
+4. Probar los filtros de fecha ("Ayer", "Últimos 7 días") con el historial
+   de ejemplo.
+5. Iniciar sesión como `admin`: en `/dashboard` deben verse ingresos de
+   hoy/semana/mes, el gráfico de 7 días, el top 5 y la distribución por
+   estado, y en `/pedidos` el botón "Eliminar".
+6. Sin sesión, `/pedidos` redirige a `/login` y `/api/orders` responde `401`.
 
 ## Limitaciones conocidas (Etapa 2)
 
